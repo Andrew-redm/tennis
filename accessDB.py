@@ -77,6 +77,7 @@ def get_matches_in_daterange(tour, start_date, end_date=None, singles_only=True)
             result = connection.execute(query)
             matches = pd.DataFrame(result.fetchall(), columns=result.keys())
             matches['surface'] = matches['surface'].map({1: 'hard', 2: 'clay', 3: 'indoor hard', 4: 'carpet', 5: 'grass', 6: 'acrylic'})
+            matches = matches.sort_values(by=['DATE_G'], ascending=False) #this could be wrong
         
             return matches
     except SQLAlchemyError as e:
@@ -153,7 +154,10 @@ def get_matches_in_tournament(tour, tournament_ids, singlesOnly=True):
 def get_match_stats(tour, id1, id2, tournament_id):
     try:
         stat_table = get_table(tour, 'stat')
-        
+        id1 = int(id1)
+        id2 = int(id2)
+        tournament_id = int(tournament_id)
+
         query = select(stat_table).where(
             and_(
                 stat_table.c.ID_T == tournament_id,
@@ -217,4 +221,70 @@ def get_upcoming_matches(tour, remove_doubles=True):
     except SQLAlchemyError as e:
         print(f"An error occurred: {e}")
         return None
+
+def top_n_in_date_range(tour, n, start_date, end_date=None):
+    # this function will return a list of player ids  that were in the top 100 at any time in the specified timerange
+    if end_date is None:
+        end_date = datetime.now() - timedelta(days=1)
+        end_date = end_date.strftime('%Y-%m-%d')
     
+    
+    ratingsTable = get_table(tour, 'ratings')
+    
+    query = select(ratingsTable.c.ID_P_R).where(and_(
+            ratingsTable.c.DATE_R >= start_date,
+            ratingsTable.c.DATE_R <= end_date,
+            ratingsTable.c.POS_R < n
+        ))
+
+    with engine.connect() as connection:
+        result = connection.execute(query)
+        player_ids = [row[0] for row in result]
+        return list(set(player_ids))
+
+def get_player_matches_in_daterange(tour, player_id, start_date, end_date=None):
+    if end_date is None:
+        end_date = datetime.now() - timedelta(days=1)
+
+    try:
+        games_table = get_table(tour, 'games')
+        players_table = get_table(tour, 'players')
+        tours_table = get_table(tour, 'tours')
+
+        player1 = alias(players_table, name='player1')
+        player2 = alias(players_table, name='player2')
+
+        query = select(
+            games_table.c.ID1_G,
+            games_table.c.ID2_G,
+            games_table.c.DATE_G,
+            games_table.c.RESULT_G,
+            player1.c.NAME_P.label('player1_name'),
+            player2.c.NAME_P.label('player2_name'),
+            tours_table.c.ID_T.label('tournament_id'),
+            tours_table.c.NAME_T.label('tournament_name')
+        ).select_from(
+            games_table.join(player1, games_table.c.ID1_G == player1.c.ID_P)
+                       .join(player2, games_table.c.ID2_G == player2.c.ID_P)
+                       .join(tours_table, games_table.c.ID_T_G == tours_table.c.ID_T)
+        ).where(
+            and_(
+                games_table.c.DATE_G >= start_date,
+                games_table.c.DATE_G <= end_date,
+                or_(
+                    games_table.c.ID1_G == player_id,
+                    games_table.c.ID2_G == player_id
+                )
+            )
+        )
+
+        with engine.connect() as connection:
+            result = connection.execute(query)
+            matches = pd.DataFrame(result.fetchall(), columns=result.keys())
+            matches = matches.sort_values(by=['DATE_G'], ascending=False)
+            return matches
+    except SQLAlchemyError as e:
+        print(f"An error occurred: {e}")
+        return None
+    
+get_player_matches_in_daterange('atp', get_player_id('atp', 'Jiri Lehecka'), '2024-01-01')
