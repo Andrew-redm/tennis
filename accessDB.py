@@ -38,7 +38,7 @@ def get_matches_in_daterange(tour, start_date, end_date=None, singles_only=True)
     if end_date is None:
         end_date = datetime.now() - timedelta(days=1)
     
-    start_date_str = start_date.strftime('%Y-%m-%d')
+    start_date_str = start_date
     end_date_str = end_date.strftime('%Y-%m-%d')
 
     try:
@@ -242,7 +242,7 @@ def top_n_in_date_range(tour, n, start_date, end_date=None):
         player_ids = [row[0] for row in result]
         return list(set(player_ids))
 
-def get_player_matches_in_daterange(tour, player_id, start_date, end_date=None):
+def get_player_matches_in_daterange(tour, player_ids, start_date, end_date=None):
     if end_date is None:
         end_date = datetime.now() - timedelta(days=1)
 
@@ -250,15 +250,14 @@ def get_player_matches_in_daterange(tour, player_id, start_date, end_date=None):
         games_table = get_table(tour, 'games')
         players_table = get_table(tour, 'players')
         tours_table = get_table(tour, 'tours')
+        stat_table = get_table(tour, 'stat')
 
         player1 = alias(players_table, name='player1')
         player2 = alias(players_table, name='player2')
 
         query = select(
-            games_table.c.ID1_G,
-            games_table.c.ID2_G,
-            games_table.c.DATE_G,
-            games_table.c.RESULT_G,
+            games_table,  # Select all columns from games_table
+            stat_table,  # Select all columns from stat_table
             player1.c.NAME_P.label('player1_name'),
             player2.c.NAME_P.label('player2_name'),
             tours_table.c.ID_T.label('tournament_id'),
@@ -267,13 +266,18 @@ def get_player_matches_in_daterange(tour, player_id, start_date, end_date=None):
             games_table.join(player1, games_table.c.ID1_G == player1.c.ID_P)
                        .join(player2, games_table.c.ID2_G == player2.c.ID_P)
                        .join(tours_table, games_table.c.ID_T_G == tours_table.c.ID_T)
+                       .join(stat_table, and_(
+                           games_table.c.ID1_G == stat_table.c.ID1,
+                           games_table.c.ID2_G == stat_table.c.ID2,
+                           games_table.c.ID_T_G == stat_table.c.ID_T  # Corrected join condition
+                       ))
         ).where(
             and_(
                 games_table.c.DATE_G >= start_date,
                 games_table.c.DATE_G <= end_date,
                 or_(
-                    games_table.c.ID1_G == player_id,
-                    games_table.c.ID2_G == player_id
+                    games_table.c.ID1_G.in_(player_ids),
+                    games_table.c.ID2_G.in_(player_ids)
                 )
             )
         )
@@ -286,5 +290,3 @@ def get_player_matches_in_daterange(tour, player_id, start_date, end_date=None):
     except SQLAlchemyError as e:
         print(f"An error occurred: {e}")
         return None
-    
-get_player_matches_in_daterange('atp', get_player_id('atp', 'Jiri Lehecka'), '2024-01-01')
