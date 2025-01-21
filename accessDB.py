@@ -32,6 +32,20 @@ def get_player_id(tour, player_name):
         print(f"An error occurred: {e}")
         return None
 
+def get_player_name(tour, player_id):
+    try:
+        players_table = get_table(tour, 'players')
+        query = select(players_table.c.NAME_P).where(players_table.c.ID_P == player_id)
+        
+        with engine.connect() as connection:
+            result = connection.execute(query)
+            player_name = result.scalar()
+            return player_name
+    except SQLAlchemyError as e:
+        print(f"An error occurred: {e}")
+        return None
+
+
 get_player_id('wta', 'Serena Williams')
 
 def get_matches_in_daterange(tour, start_date, end_date=None, singles_only=True):
