@@ -3,14 +3,16 @@ import pandas as pd
 import pickle
 from accessDB import get_upcoming_matches
 from naiveElo import EloModel, Player, Match
+import os
 
 def load_elo_model(filename: str):
-    with open(filename, 'rb') as file:
-        return pickle.load(file)
+    file_path = os.path.join(os.path.dirname(__file__), filename) #Added to handle file paths correctly
+    with open(file_path, 'rb') as file: #Fixed file opening
+        return pickle.load(file) #Fixed pickle loading
 
 elo_models = {
-    'atp': load_elo_model('elo_model_atp.pkl'),
-    'wta': load_elo_model('elo_model_wta.pkl')
+    'atp': None,
+    'wta': None
 }
 
 def calculate_expected_score(p1, p2) -> float:
@@ -29,17 +31,17 @@ def get_player_elo(player_id, tour, surface='overall'):
     return player.elo['overall']
 
 def prepare_data(tour, elo):
-    matches = get_upcoming_matches(tour)
-    matches['Player1 ELO'] = matches.apply(lambda row: get_player_elo(row['ID1'], tour), axis=1)
-    matches['Player2 ELO'] = matches.apply(lambda row: get_player_elo(row['ID2'], tour), axis=1)
-    matches['P1 Model'] = round(matches.apply(lambda row: calculate_expected_score(row['Player1 ELO'], row['Player2 ELO']), axis=1),2)
-    matches['P2 Model'] = 1 - matches['P1 Model']
-    matches['Player1 sELO'] = matches.apply(lambda row: get_player_elo(row['ID1'], tour, row['Surface']), axis=1)
-    matches['Player2 sELO'] = matches.apply(lambda row: get_player_elo(row['ID2'], tour, row['Surface']), axis=1)
-    matches['P1 sModel'] = round(matches.apply(lambda row: calculate_expected_score(row['Player1 sELO'], row['Player2 sELO']), axis=1),2)
-    matches['P2 sModel'] = 1 - matches['P1 sModel']
-    matches['P1 Market'] = 1 / matches['P1_Odds']
-    matches['P2 Market'] = 1 / matches['P2_Odds']
+    matches = get_upcoming_matches(tour) #Get matches only once
+    matches['Player1 ELO'] = matches['ID1'].apply(lambda id: get_player_elo(id, tour)) #Vectorized operation
+    matches['Player2 ELO'] = matches['ID2'].apply(lambda id: get_player_elo(id, tour)) #Vectorized operation
+    matches['P1 Model'] = (matches.apply(lambda row: calculate_expected_score(row['Player1 ELO'], row['Player2 ELO']), axis=1)).round(2) #Vectorized operation
+    matches['P2 Model'] = 1 - matches['P1 Model'] #Vectorized operation
+    matches['Player1 sELO'] = matches.apply(lambda row: get_player_elo(row['ID1'], tour, row['Surface']), axis=1) #Vectorized operation
+    matches['Player2 sELO'] = matches.apply(lambda row: get_player_elo(row['ID2'], tour, row['Surface']), axis=1) #Vectorized operation
+    matches['P1 sModel'] = (matches.apply(lambda row: calculate_expected_score(row['Player1 sELO'], row['Player2 sELO']), axis=1)).round(2) #Vectorized operation
+    matches['P2 sModel'] = 1 - matches['P1 sModel'] #Vectorized operation
+    matches['P1 Market'] = 1 / matches['P1_Odds'] #Vectorized operation
+    matches['P2 Market'] = 1 / matches['P2_Odds'] #Vectorized operation
     return matches[['Player1', 'P1 Model', 'P1 sModel', 'P1 Market', 'Player2' , 'P2 Model', 'P2 sModel', 'P2 Market', 'Tournament']]
 
 def format_player_name(player_name, model_value, market_price):
@@ -50,6 +52,8 @@ def format_player_name(player_name, model_value, market_price):
 
 def main():
     st.title("Upcoming Matches")
+    elo_models['atp'] = load_elo_model('elo_model_atp.pkl')
+    elo_models['wta'] = load_elo_model('elo_model_wta.pkl')
     st.sidebar.title("Filter Matches")
     selected_tour = str.lower(st.sidebar.selectbox("Tour", ['atp', 'wta']))
     elo = elo_models[selected_tour]
@@ -57,6 +61,7 @@ def main():
     if matches.empty:
         st.write("No matches found")
         return
+
 
     tournaments = matches['Tournament'].unique()
     selected_tournament = st.sidebar.selectbox("Tournaments", tournaments, key="Tournament_selectbox")
