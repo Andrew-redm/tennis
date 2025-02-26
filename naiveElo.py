@@ -5,6 +5,7 @@ from accessDB import get_matches_in_daterange, get_player_id
 import pandas as pd
 import pickle
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 class Player(BaseModel):
     id: int
@@ -158,6 +159,8 @@ def load_data(tour, start_date: str, end_date: str):
 #     plt.show()
 
 def plot_elo_history(tour, player_names: List[str], elo_type: str = 'overall'):
+    fig, ax = plt.subplots(figsize=(12, 6))  # Create larger figure
+    
     for player_name in player_names:
         player_id = get_player_id(tour, player_name)
         player = elo.get_player(player_id)
@@ -167,8 +170,18 @@ def plot_elo_history(tour, player_names: List[str], elo_type: str = 'overall'):
         dates = list(player.elo_history[elo_type].keys())
         elos = list(player.elo_history[elo_type].values())
 
-        plt.plot(dates, elos, marker='o', linestyle='-', label=player_name)
-
+        ax.plot(dates, elos, marker='o', linestyle='-', label=player_name)
+    
+    # Format x-axis with dates
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))  # Show tick every 3 months
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))  # Format as 'Mar 2023'
+    
+    # Rotate and align the tick labels so they look better
+    plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    
+    # Add padding to prevent label cutoff
+    plt.subplots_adjust(bottom=0.2)
+    
     plt.title('ELO Rating History')
     plt.xlabel('Date')
     plt.ylabel('ELO Rating')
@@ -177,7 +190,6 @@ def plot_elo_history(tour, player_names: List[str], elo_type: str = 'overall'):
     plt.show()
 
 # Example usage
-
 
 #refactor some other time
 # def get_elo_history_df(tour, player_name: str) -> pd.DataFrame:
@@ -212,7 +224,9 @@ def load_elo_model(filename: str) -> EloModel:
 if __name__ == "__main__":
     tour = 'wta'
     start_date = '2021-01-01'
-    end_date = '2024-10-16'
+    end_date = '2025-02-25'
     main(tour, start_date, end_date)
     save_elo_model(f'elo_model_{tour}.pkl')
 
+# plot_elo_history('atp', ['Carlos Alcaraz', 'Jannik Sinner', 'Novak Djokovic'])
+plot_elo_history('wta', ['Aryna Sabalenka', 'Iga Swiatek', 'Elena Rybakina'])
